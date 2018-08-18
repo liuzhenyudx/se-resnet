@@ -5,6 +5,8 @@ import torch.nn as nn
 from torch.utils.data import DataLoader
 from torchvision import datasets, transforms
 from torch import optim as optim
+import visdom
+import numpy as np
 class basicblock(nn.Module):
 	"""docstring for basicblock"""
 	def __init__(self, inchannel,outchannel,stride=1):
@@ -23,17 +25,19 @@ class basicblock(nn.Module):
 				nn.BatchNorm2d(outchannel))
 		if outchannel == 64:
 			self.pool=nn.AvgPool2d(32,stride=1)
-			print(64)
+			
 		elif outchannel ==128:
 			self.pool=nn.AvgPool2d(16,stride=1)
-			print(128)
+			
 		elif outchannel == 256:
 			self.pool=nn.AvgPool2d(8,stride=1)
 		elif outchannel == 512 :
 			self.pool=nn.AvgPool2d(4,stride=1)
-		self.fc1=nn.Linear(outchannel,outchannel//16)
+		self.fc1=nn.Sequential(nn.Dropout(),
+            nn.Linear(outchannel,outchannel//16))
 		self.relu=nn.ReLU()
-		self.fc2=torch.nn.Linear(outchannel//16,outchannel)
+		self.fc2=nn.Sequential(nn.Dropout(),
+            torch.nn.Linear(outchannel//16,outchannel))
 		self.sigmoid=nn.Sigmoid()
 
 	def forward(self,input):
@@ -64,7 +68,8 @@ class resnet(nn.Module):
 		self.layer2=self.make(basicblock,128,2,stride=2)
 		self.layer3=self.make(basicblock,256,2,stride=2)
 		self.layer4=self.make(basicblock,512,2,stride=2)
-		self.fc = nn.Linear(512,100)
+		self.fc = nn.Sequential(nn.Dropout(),
+            nn.Linear(512,100))
 	def make(self,block,channel,num,stride):
 		strides=[stride] + [1]*(num-1)
 		layers = []
@@ -185,7 +190,7 @@ def main():
                                             transforms.RandomCrop(32, padding=4),  #先四周填充0，在吧图像随机裁剪成32*32
                                             transforms.RandomHorizontalFlip(),  #图像一半的概率翻转，一半的概率不翻转
                                             transforms.ToTensor(),
-                                            transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010))])),
+                                            transforms.Normalize((0.5017, 0.4867,0.4408), (0.2675,0.2565,0.2761))])),
                                             batch_size=batch_size,
                                             shuffle=True
                                             )
@@ -193,7 +198,7 @@ def main():
     test_loader = DataLoader(
         datasets.CIFAR100(root='../liu', train=False,
                          transform=transforms.Compose([transforms.ToTensor(),
-                         transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010))])),
+                         transforms.Normalize((0.5017, 0.4867,0.4408), (0.2675,0.2565,0.2761))])),
         batch_size=batch_size
     )
 
@@ -204,6 +209,16 @@ def main():
     print(model)
     # define loss function
     ce_loss = torch.nn.CrossEntropyLoss()
+    vis=visdom.Visdom()
+    x,train_acc,test_acc=0,0,0
+    win=vis.line(
+        X=np.array([x]),
+        Y = np.column_stack((np.array([train_acc]),np.array([test_acc]))),
+        opts=dict(
+            title = "train ACC and test ACC",
+            legend =["train_acc","test_acc"])
+        )
+
 
     # define optimizer
     optimizer = optim.Adam(model.parameters(), lr=1e-3)
@@ -217,11 +232,22 @@ def main():
                 data = data.cuda()
                 target = target.cuda()
             acc, loss = train(model, data, target, ce_loss, optimizer)
-            if train_step % 100 == 0:
+            train_acc=acc
+            if train_step % 5 == 0:
                 print('Train set: Step: {}, Loss: {:.4f}, Accuracy: {:.2f}'.format(train_step, loss, acc))
-            if train_step % eval_step == 0:
                 acc, loss = test(model, test_loader, ce_loss, use_cuda)
                 print('\nTest set: Step: {}, Loss: {:.4f}, Accuracy: {:.2f}\n'.format(train_step, loss, acc))
+                test_acc=acc
+                vis.line(
+                    X = np.array([train_step]),
+                    Y = np.column_stack(
+                        (np.array([train_acc]),np.array([test_acc])
+                        )
+                        ),
+                    win = win,
+                    update = "append"
+                    )
+                pass
 
 
 if __name__ == '__main__':
