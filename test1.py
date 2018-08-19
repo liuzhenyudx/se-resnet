@@ -62,10 +62,10 @@ class resnet(nn.Module):
 			nn.Conv2d(3,64,3,1,1,bias=False),
 			nn.BatchNorm2d(self.inchannel),
 			nn.ReLU(inplace=True))
-		self.layer1=self.make(basicblock,64,2,stride=1)
-		self.layer2=self.make(basicblock,128,2,stride=2)
-		self.layer3=self.make(basicblock,256,2,stride=2)
-		self.layer4=self.make(basicblock,512,2,stride=2)
+		self.layer1=self.make(basicblock,64,9,stride=1)
+		self.layer2=self.make(basicblock,128,9,stride=2)
+		self.layer3=self.make(basicblock,256,9,stride=2)
+		self.layer4=self.make(basicblock,512,9,stride=2)
 		self.fc = nn.Sequential(nn.Dropout(),
             nn.Linear(512,100))
 	def make(self,block,channel,num,stride):
